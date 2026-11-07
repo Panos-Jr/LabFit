@@ -1,5 +1,5 @@
 """
-Plot & Fit GUI for the y1 physics lab  -  v3.0
+Plot & Fit GUI for the y1 physics lab  -  v3.0 (rewrite v1.0)
 
 Original author: Wolfgang Theis (2019).  Spreadsheet / robustness rewrite 2026.
 
