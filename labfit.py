@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Plot & Fit GUI for the y1 physics lab  -  v3.0
 
@@ -43,10 +42,11 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Callable, Optional
 
+import threading
+
 import numpy as np
-import scipy.special
-from scipy.optimize import curve_fit
-from scipy.odr import ODR, Model, RealData
+# scipy (special / optimize / odr) is imported lazily - see _fit_once, perform and prewarm_scipy -
+# so the window appears ~0.15 s sooner (more in a frozen build).
 
 from PyQt5.QtCore import Qt, QAbstractTableModel, QModelIndex, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QImage, QKeySequence, QPainter
@@ -68,8 +68,7 @@ from matplotlib.figure import Figure
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 5000))
 
 import warnings
-from scipy.optimize import OptimizeWarning
-warnings.simplefilter('ignore', OptimizeWarning)
+warnings.filterwarnings('ignore', message='Covariance of the parameters could not be estimated')
 warnings.filterwarnings('ignore', message='Polyfit may be poorly conditioned')
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
@@ -79,6 +78,11 @@ INITIAL_ROWS = 500
 MAX_ROWS = 200_000
 ROLE_KEYS = ('x', 'y', 'dx', 'dy')
 ROLE_LABELS = {'x': 'X', 'y': 'Y', 'dx': 'ΔX', 'dy': 'ΔY'}
+
+
+                                                                               
+                
+                                                                               
 
 def _parent():
     return QApplication.activeWindow()
@@ -103,8 +107,17 @@ def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
     except Exception:
-        base_path = os.path.abspath(".")
+        base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
+
+
+def prewarm_scipy():
+    """Import the scipy parts a fit needs in a background thread, so the first
+    'Fit' click is instant. Failures are ignored here and surface in the real fit."""
+    try:
+        import scipy.special, scipy.optimize, scipy.odr      # noqa: F401
+    except Exception:
+        pass
 
 def parse_number(text) -> Optional[float]:
     """Strict number parser. Accepts 1.5, 1,5 (decimal comma), -3e-4, unicode minus.
@@ -142,6 +155,11 @@ def error_string(v: float, e: float, sig: int = 2) -> str:
     except Exception:
         return f'{v:#.4g}'
 
+
+                                                                               
+                                                      
+                                                                               
+
 class CellError(Exception):
     """Any problem with a formula or a referenced cell. str(e) is user-facing."""
 
@@ -159,7 +177,7 @@ _FUNCS = {
 }
 _CONSTS = {'pi': math.pi, 'e': math.e, 'tau': math.tau}
 _CELL_NAME = re.compile(r'^([A-Fa-f])(\d+)$')
-# For rewriting references in a formula text (fill down / fill column)
+                                                                      
 _REF_RE = re.compile(r'(?<![A-Za-z0-9_.$])(\$?)([A-Fa-f])(\$?)(\d+)(?![A-Za-z0-9_(])')
 
 
@@ -246,7 +264,7 @@ def evaluate_expression(expr: str, get_cell: Callable[[int, int], float]) -> flo
         raise
     except RecursionError:
         raise CellError('formula too deeply nested')
-    except Exception as exc:  # never let anything else escape
+    except Exception as exc:                                  
         raise CellError(f'{type(exc).__name__}')
     if not math.isfinite(v):
         raise CellError('result is not finite')
@@ -261,7 +279,7 @@ def shift_formula(text: str, drow: int) -> str:
     """Move relative row references down by drow (Excel-style fill)."""
     def rep(m):
         row = int(m.group(4))
-        if not m.group(3):          # relative row
+        if not m.group(3):                        
             row += drow
         if row < 1:
             raise CellError('reference moved above row 1')
@@ -269,17 +287,19 @@ def shift_formula(text: str, drow: int) -> str:
     return _REF_RE.sub(rep, text)
 
 
-
+                                                                               
+                                            
+                                                                               
 
 _EMPTY = ('empty', None)
 
 
 @dataclass
 class Extracted:
-    data: np.ndarray                    # (n, 4): x, y, dx, dy   (NaN where absent)
-    rows: np.ndarray                    # spreadsheet row numbers (1-based) of data rows
-    issues: list = field(default_factory=list)   # things the user should fix
-    notes: list = field(default_factory=list)    # FYI
+    data: np.ndarray                                                               
+    rows: np.ndarray                                                                    
+    issues: list = field(default_factory=list)                               
+    notes: list = field(default_factory=list)         
 
     @property
     def n(self) -> int:
@@ -292,7 +312,7 @@ def clean_cell(text) -> Optional[str]:
     s = str(text).strip().replace('−', '-').replace(' ', ' ')
     if not s:
         return None
-    if re.match(r'^[+-]?\d+,\d+([eE][+-]?\d+)?$', s):    # European decimal comma
+    if re.match(r'^[+-]?\d+,\d+([eE][+-]?\d+)?$', s):                            
         s = s.replace(',', '.')
     return s
 
@@ -321,7 +341,7 @@ class DataTableModel(QAbstractTableModel):
         self.undo_stack = undo_stack
         self.roles: dict = {'x': 0, 'y': 1, 'dx': None, 'dy': 2}
 
-
+                                                                             
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._raw)
 
@@ -347,6 +367,7 @@ class DataTableModel(QAbstractTableModel):
         self.refresh_headers()
         self.changed.emit()
 
+                                                                             
     def raw(self, r: int, c: int) -> Optional[str]:
         if 0 <= r < len(self._raw) and 0 <= c < NCOLS:
             return self._raw[r][c]
@@ -368,7 +389,7 @@ class DataTableModel(QAbstractTableModel):
                 return r + 1
         return 0
 
-
+                                                                            
     def _res(self, r: int, c: int, stack=None):
         key = (r, c)
         hit = self._cache.get(key)
@@ -412,7 +433,7 @@ class DataTableModel(QAbstractTableModel):
     def _ensure_cache(self):
         if self._dirty:
             self._cache.clear()
-            for key in sorted(self._formulas):      # row order keeps recursion shallow
+            for key in sorted(self._formulas):                                         
                 self._res(*key)
             self._dirty = False
 
@@ -425,6 +446,7 @@ class DataTableModel(QAbstractTableModel):
         self._ensure_cache()
         return self._res(r, c)
 
+                                                                             
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
@@ -472,8 +494,9 @@ class DataTableModel(QAbstractTableModel):
             evaluate_expression(s, lambda rr, cc: self._ref(rr, cc, set()))
             return '=' + s
         except CellError:
-            return s          # keep the text; it will show #ERR with an explanation
+            return s                                                                
 
+                                                                            
     def push_changes(self, changes: dict, text: str):
         old, new = {}, {}
         for key, val in changes.items():
@@ -560,7 +583,7 @@ class DataTableModel(QAbstractTableModel):
         last = self.last_row(cols or None)
         if last < base:
             raise CellError('nothing to fill: the cells the formula refers to are empty')
-        try:                                    # test the first row before touching anything
+        try:                                                                                 
             evaluate_expression(t, lambda rr, cc: self._ref(rr, cc, set()))
         except CellError as exc:
             raise CellError(f'formula fails on its first row ({base}): {exc}')
@@ -570,7 +593,8 @@ class DataTableModel(QAbstractTableModel):
         changes = {(r - 1, col): shift_formula(t, r - base) for r in range(base, last + 1)}
         self.push_changes(changes, f'fill column {LETTERS[col]}')
         return len(changes)
-        
+
+                                                                             
     def extract(self) -> Extracted:
         self._ensure_cache()
         n = len(self._raw)
@@ -640,6 +664,11 @@ PRESETS = [
     ('A + B', '{a}+{b}', 2), ('A − B', '{a}-{b}', 2), ('A × B', '{a}*{b}', 2), ('A ÷ B', '{a}/{b}', 2),
 ]
 
+
+                                                                               
+                   
+                                                                               
+
 def parse_clipboard(text: str) -> list:
     lines = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
     while lines and not lines[-1].strip():
@@ -673,7 +702,7 @@ class SpreadsheetView(QTableView):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu)
 
-    # Enter commits and moves down, like Excel
+                                              
     def closeEditor(self, editor, hint):
         super().closeEditor(editor, hint)
         if hint == QAbstractItemDelegate.SubmitModelCache:
@@ -764,13 +793,17 @@ class SpreadsheetView(QTableView):
         menu.exec_(self.viewport().mapToGlobal(pos))
 
 
+                                                                               
+             
+                                                                               
+
 class FitFunction(ABC):
     name: str = 'abstract'
     latex: str = ''
     param_names: list = []
     param_units: list = []
     param_names_latex: Optional[list] = None
-    multistart: bool = False          # try several starting points (oscillating / peaked models)
+    multistart: bool = False                                                                     
 
     @abstractmethod
     def calc(self, x, *params): ...
@@ -995,6 +1028,11 @@ FIT_FUNCTIONS = [
     FitFunction_resonance(), FitFunction_cosine(), FitFunction_abscosine(),
 ]
 
+
+                                                                               
+             
+                                                                               
+
 class FitError(Exception):
     pass
 
@@ -1012,7 +1050,7 @@ class FitResult:
     chi2: float = float('nan')
     chi2_red: float = float('nan')
     pvalue: float = float('nan')
-    inferred: bool = False        # errors inferred from scatter (no ΔY supplied)
+    inferred: bool = False                                                       
     s_hat: float = float('nan')
     notes: list = field(default_factory=list)
 
@@ -1050,6 +1088,7 @@ class FitEngine:
         npar = len(func.param_names)
         notes = []
         if xsigma is not None:
+            from scipy.odr import ODR, Model, RealData
             odr = ODR(RealData(x, y, sx=xsigma, sy=sigma), Model(func.calc_odr),
                       beta0=np.asarray(start, float), maxit=300)
             odr.set_job(fit_type=0)
@@ -1061,9 +1100,10 @@ class FitEngine:
                 notes.append('ODR stopped before full convergence - check the fit or change the start values')
             cov = out.cov_beta
             if cov is not None and sigma is not None and getattr(out, 'res_var', 0) > 0:
-                cov = cov / out.res_var                  # absolute-error scaling
+                cov = cov / out.res_var                                          
             pcov = None if cov is None else np.asarray(cov, float)
             return popt, pcov, 'orthogonal distance regression (ΔX and ΔY)', notes
+        from scipy.optimize import curve_fit
         kw = dict(p0=np.asarray(start, float), maxfev=20000)
         if sigma is not None:
             kw.update(sigma=sigma, absolute_sigma=True)
@@ -1136,7 +1176,8 @@ class FitEngine:
         if sig is not None and s is not None:
             res.chi2 = float(np.sum((resid / s) ** 2))
             res.chi2_red = res.chi2 / dof
-            res.pvalue = float(scipy.special.gammaincc(dof / 2.0, res.chi2 / 2.0))
+            from scipy.special import gammaincc      # == chi2.sf(chi2, dof), without importing scipy.stats
+            res.pvalue = float(gammaincc(dof / 2.0, res.chi2 / 2.0))
             if res.chi2_red > 3:
                 notes.append(f'χ²/ν = {res.chi2_red:.2f} ≫ 1: the model may not describe the data, or the uncertainties are underestimated')
             elif res.chi2_red < 0.3:
@@ -1171,6 +1212,11 @@ class FitThread(QThread):
             out = f'{type(exc).__name__}: {exc}'
         self.done.emit(self.token, out)
 
+
+                                                                               
+              
+                                                                               
+
 @dataclass
 class PlotData:
     data: np.ndarray
@@ -1182,8 +1228,8 @@ class PlotData:
     curve_label: Optional[str] = None
     detail: Optional[str] = None
     stats: str = ''
-    resid: Optional[np.ndarray] = None        # aligned with data rows
-    resid_err: Optional[np.ndarray] = None    # error bars for unscaled residuals
+    resid: Optional[np.ndarray] = None                                
+    resid_err: Optional[np.ndarray] = None                                       
     resid_scaled: bool = True
     xlog: bool = False
     ylog: bool = False
@@ -1267,7 +1313,7 @@ class MyMplWidget(FigureCanvas):
             ax.text(0.98, 0.02, d.signature, transform=ax.transAxes, ha='right', va='bottom', fontsize=10, color='#555')
 
         if ax2 is not None:
-            ax.tick_params(labelbottom=True)       # x axis + label stay under the main plot
+            ax.tick_params(labelbottom=True)                                                
             self._residuals(ax2, d)
         ax.set_xlabel(d.xlabel or 'X', fontsize=12)
         self.fig.subplots_adjust(left=0.09, right=0.97, top=0.93, bottom=0.08 if ax2 is not None else 0.11)
@@ -1305,6 +1351,11 @@ class MyMplWidget(FigureCanvas):
         if event.xdata is not None and event.ydata is not None:
             self.main_window.statusBar().showMessage(f'x = {event.xdata:.5g},   y = {event.ydata:.5g}', 2000)
 
+
+                                                                               
+                
+                                                                               
+
 class ControlWidget(QWidget):
     status = pyqtSignal(str)
 
@@ -1325,7 +1376,8 @@ class ControlWidget(QWidget):
         self._status_timer.timeout.connect(self._refresh_data_status)
         self.model.changed.connect(self._status_timer.start)
         self._refresh_data_status()
-        
+
+                                                                             
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(4, 4, 4, 4)
@@ -1491,6 +1543,7 @@ class ControlWidget(QWidget):
         split.addWidget(scroll)
         split.setSizes([430, 420])
 
+                                                                             
     def _set_default_roles(self, with_dx: bool):
         vals = {'x': 0, 'y': 1, 'dx': 2 if with_dx else None, 'dy': 3 if with_dx else 2}
         for k, cmb in self.cmb_role.items():
@@ -1542,6 +1595,7 @@ class ControlWidget(QWidget):
         except CellError as exc:
             show_warn(f'Could not fill column: {exc}')
 
+                                                                             
     def _refresh_data_status(self):
         try:
             ex = self.model.extract()
@@ -1556,6 +1610,7 @@ class ControlWidget(QWidget):
         self.lbl_data.setText(msg + ('  ' + ' • '.join(parts) if parts else ''))
         self.lbl_data.setStyleSheet('color: #b00020;' if ex.issues else 'color: #444;')
 
+                                                                             
     def _on_model_changed(self):
         if self._threads:
             self.cancel_fit()
@@ -1581,7 +1636,7 @@ class ControlWidget(QWidget):
         if v is not None:
             return v
         try:
-            return evaluate_expression(t, no_cells)        # allows 1e-3, pi/2, 3*0.5
+            return evaluate_expression(t, no_cells)                                  
         except CellError:
             return float('nan')
 
@@ -1609,6 +1664,7 @@ class ControlWidget(QWidget):
             guess = np.ones(len(vals))
         return np.array([g if v is None else v for v, g in zip(vals, guess)], float)
 
+                                                                             
     def _collect(self):
         self._commit_editor()
         ex = self.model.extract()
@@ -1617,7 +1673,7 @@ class ControlWidget(QWidget):
 
     def _commit_editor(self):
         if self.view.state() == QAbstractItemView.EditingState:
-            self.btn_fit.setFocus()          # focus-out commits the open cell editor
+            self.btn_fit.setFocus()                                                  
 
     def _uncertainties(self, ex: Extracted, need_dy: bool):
         """Returns (sigma, xsigma, notes) or raises FitError with a clear message."""
@@ -1645,6 +1701,7 @@ class ControlWidget(QWidget):
             raise FitError('no ΔY values. Provide a ΔY column (or tick "infer ΔY if missing").')
         return sigma, xsigma, notes
 
+                                                                             
     def _build_plot(self, ex, func=None, popt=None, fit: Optional[FitResult] = None, sigma=None, xsigma=None) -> PlotData:
         d = PlotData(data=ex.data, title=self.ed_title.text(), xlabel=self.ed_xlabel.text() or 'X',
                      ylabel=self.ed_ylabel.text() or 'Y', signature=self.ed_name.text(),
@@ -1733,6 +1790,7 @@ class ControlWidget(QWidget):
         except Exception as exc:
             show_warn(f'Could not plot model: {exc}')
 
+                                                                             
     def on_fit(self):
         if self._threads:
             return
@@ -1771,7 +1829,7 @@ class ControlWidget(QWidget):
 
     def _on_fit_done(self, token, out):
         if token != self._token or self._pending is None:
-            return                                   # cancelled / stale
+            return                                                      
         _, ex, func, sigma, xsigma, notes = self._pending
         self._pending = None
         self.btn_fit.setEnabled(True)
@@ -1813,7 +1871,7 @@ class ControlWidget(QWidget):
 
     def cancel_fit(self):
         if self._threads or self._pending:
-            self._token += 1                         # result will be ignored
+            self._token += 1                                                 
             self._pending = None
             self.status.emit('Fit cancelled')
         self.btn_fit.setEnabled(True)
@@ -1822,6 +1880,11 @@ class ControlWidget(QWidget):
     def wait_for_threads(self, ms=5000):
         for t in list(self._threads):
             t.wait(ms)
+
+
+                                                                               
+              
+                                                                               
 
 class MyMainWindow(QMainWindow):
     def __init__(self, argv, x=None, y=None, xerr=None, yerr=None):
@@ -1855,7 +1918,8 @@ class MyMainWindow(QMainWindow):
         if x is not None or y is not None:
             self._load_arrays(x, y, xerr, yerr)
         self.control.undo_stack.setClean()
-        
+
+                                                                             
     def _act(self, menu, text, shortcut, slot):
         a = QAction(text, self)
         if shortcut:
@@ -1898,7 +1962,8 @@ class MyMainWindow(QMainWindow):
         self._act(r, '&Cancel fit', 'Ctrl+.', c.cancel_fit)
         h = m.addMenu('&Help')
         self._act(h, '&Formulas && shortcuts', None, self.handle_help)
-        
+
+                                                                             
     def _load_arrays(self, x, y, xerr, yerr):
         try:
             cols = []
@@ -2054,6 +2119,7 @@ class MyMainWindow(QMainWindow):
             'ΔY / ΔX values left blank are copied from the row above.\n'
             'A ΔX column switches the fit to orthogonal distance regression.')
 
+                                                                             
     def _confirm_discard(self) -> bool:
         c = self.control
         if c.undo_stack.isClean() or c.model.last_row() == 0:
@@ -2078,6 +2144,11 @@ class MyMainWindow(QMainWindow):
         self.control.wait_for_threads(5000)
         event.accept()
 
+
+                                                                               
+              
+                                                                               
+
 _WINDOWS = []
 
 
@@ -2086,8 +2157,10 @@ def main(x=None, y=None, xerr=None, yerr=None):
     
     if sys.platform == 'win32':
         import ctypes
-        myappid = 'uob.labfit.plotfit.1.0'
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('uob.labfit.plotfit.1.0')
+        except Exception:
+            pass
     elif sys.platform == 'darwin':
         try:
             from AppKit import NSApplication, NSApplicationActivationPolicyRegular
@@ -2103,20 +2176,16 @@ def main(x=None, y=None, xerr=None, yerr=None):
     w = MyMainWindow(sys.argv, x=x, y=y, xerr=xerr, yerr=yerr)
     _WINDOWS.append(w)
     
+                                                                
     from PyQt5.QtGui import QIcon
-    icon = QIcon(resource_path('app.ico'))
-    w.setWindowIcon(icon)
-    
-    w.show()
-    
-    if sys.platform == 'win32':
-        w.setWindowIcon(icon)
-        try:
-            ctypes.windll.user32.SetWindowPos(int(w.winId()), -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
-        except Exception:
-            pass
+    icon = resource_path('app.ico')
+    if os.path.exists(icon):
+        w.setWindowIcon(QIcon(icon))
 
+    w.show()
+    QTimer.singleShot(100, lambda: threading.Thread(target=prewarm_scipy, daemon=True).start())
     return app.exec_()
+
 
 if __name__ == '__main__':
     sys.exit(main())
