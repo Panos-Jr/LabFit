@@ -45,9 +45,6 @@ from typing import Callable, Optional
 import threading
 
 import numpy as np
-# scipy (special / optimize / odr) is imported lazily - see _fit_once, perform and prewarm_scipy -
-# so the window appears ~0.15 s sooner (more in a frozen build).
-
 from PyQt5.QtCore import Qt, QAbstractTableModel, QModelIndex, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QImage, QKeySequence, QPainter
 from PyQt5.QtPrintSupport import QPrintDialog, QPrinter
