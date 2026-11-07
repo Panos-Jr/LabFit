@@ -2,7 +2,7 @@ name: Build LabFit
 
 on: 
   push:
-  workflow_dispatch: # Allows you to click a "Run" button manually
+  workflow_dispatch:
 
 jobs:
   build:
@@ -35,16 +35,21 @@ jobs:
         name: LabFit-Windows
         path: dist/LabFit.exe
 
-    - name: Upload Mac App
-      if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: LabFit-Mac
-        path: dist/LabFit.app
-
     - name: Upload Linux App
       if: matrix.os == 'ubuntu-latest'
       uses: actions/upload-artifact@v4
       with:
         name: LabFit-Linux
+        path: dist/LabFit
+
+    - name: Fix Mac Binary (Make executable)
+      if: matrix.os == 'macos-latest'
+      run: |
+        chmod +x dist/LabFit
+
+    - name: Upload Mac App
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: LabFit-Mac
         path: dist/LabFit
