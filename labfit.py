@@ -80,11 +80,6 @@ MAX_ROWS = 200_000
 ROLE_KEYS = ('x', 'y', 'dx', 'dy')
 ROLE_LABELS = {'x': 'X', 'y': 'Y', 'dx': 'ΔX', 'dy': 'ΔY'}
 
-
-# =========================================================================== #
-#  Small helpers
-# =========================================================================== #
-
 def _parent():
     return QApplication.activeWindow()
 
@@ -146,11 +141,6 @@ def error_string(v: float, e: float, sig: int = 2) -> str:
         return f'({v:.{dec}f} $\\pm$ {mant})'
     except Exception:
         return f'{v:#.4g}'
-
-
-# =========================================================================== #
-#  Safe formula engine  (no eval, no regex round-trip)
-# =========================================================================== #
 
 class CellError(Exception):
     """Any problem with a formula or a referenced cell. str(e) is user-facing."""
@@ -278,11 +268,6 @@ def shift_formula(text: str, drow: int) -> str:
         return f'{m.group(1)}{m.group(2).upper()}{m.group(3)}{row}'
     return _REF_RE.sub(rep, text)
 
-
-# =========================================================================== #
-#  Data model (numpy-free, cached, undoable)
-# =========================================================================== #
-
 _EMPTY = ('empty', None)
 
 
@@ -333,7 +318,6 @@ class DataTableModel(QAbstractTableModel):
         self.undo_stack = undo_stack
         self.roles: dict = {'x': 0, 'y': 1, 'dx': None, 'dy': 2}
 
-    # ---- basic Qt model ---------------------------------------------------
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._raw)
 
@@ -359,7 +343,6 @@ class DataTableModel(QAbstractTableModel):
         self.refresh_headers()
         self.changed.emit()
 
-    # ---- raw access -------------------------------------------------------
     def raw(self, r: int, c: int) -> Optional[str]:
         if 0 <= r < len(self._raw) and 0 <= c < NCOLS:
             return self._raw[r][c]
@@ -381,7 +364,7 @@ class DataTableModel(QAbstractTableModel):
                 return r + 1
         return 0
 
-    # ---- evaluation with cache -------------------------------------------
+
     def _res(self, r: int, c: int, stack=None):
         key = (r, c)
         hit = self._cache.get(key)
@@ -438,7 +421,6 @@ class DataTableModel(QAbstractTableModel):
         self._ensure_cache()
         return self._res(r, c)
 
-    # ---- Qt data ----------------------------------------------------------
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
@@ -486,9 +468,8 @@ class DataTableModel(QAbstractTableModel):
             evaluate_expression(s, lambda rr, cc: self._ref(rr, cc, set()))
             return '=' + s
         except CellError:
-            return s          # keep the text; it will show #ERR with an explanation
+            return s
 
-    # ---- mutation (all undoable) -----------------------------------------
     def push_changes(self, changes: dict, text: str):
         old, new = {}, {}
         for key, val in changes.items():
@@ -586,7 +567,6 @@ class DataTableModel(QAbstractTableModel):
         self.push_changes(changes, f'fill column {LETTERS[col]}')
         return len(changes)
 
-    # ---- analysis ---------------------------------------------------------
     def extract(self) -> Extracted:
         self._ensure_cache()
         n = len(self._raw)
@@ -655,11 +635,6 @@ PRESETS = [
     ('log10(A)', 'log10({a})', 1), ('exp(A)', 'exp({a})', 1), ('|A|', 'abs({a})', 1),
     ('A + B', '{a}+{b}', 2), ('A − B', '{a}-{b}', 2), ('A × B', '{a}*{b}', 2), ('A ÷ B', '{a}/{b}', 2),
 ]
-
-
-# =========================================================================== #
-#  Spreadsheet view
-# =========================================================================== #
 
 def parse_clipboard(text: str) -> list:
     lines = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
@@ -783,11 +758,6 @@ class SpreadsheetView(QTableView):
                          ('Clear', self.clear_selection), ('Fill down', self.fill_down_selection)):
             menu.addAction(text, fn)
         menu.exec_(self.viewport().mapToGlobal(pos))
-
-
-# =========================================================================== #
-#  Fit models
-# =========================================================================== #
 
 class FitFunction(ABC):
     name: str = 'abstract'
@@ -1020,11 +990,6 @@ FIT_FUNCTIONS = [
     FitFunction_resonance(), FitFunction_cosine(), FitFunction_abscosine(),
 ]
 
-
-# =========================================================================== #
-#  Fit engine
-# =========================================================================== #
-
 class FitError(Exception):
     pass
 
@@ -1201,11 +1166,6 @@ class FitThread(QThread):
             out = f'{type(exc).__name__}: {exc}'
         self.done.emit(self.token, out)
 
-
-# =========================================================================== #
-#  Plot widget
-# =========================================================================== #
-
 @dataclass
 class PlotData:
     data: np.ndarray
@@ -1340,11 +1300,6 @@ class MyMplWidget(FigureCanvas):
         if event.xdata is not None and event.ydata is not None:
             self.main_window.statusBar().showMessage(f'x = {event.xdata:.5g},   y = {event.ydata:.5g}', 2000)
 
-
-# =========================================================================== #
-#  Control panel
-# =========================================================================== #
-
 class ControlWidget(QWidget):
     status = pyqtSignal(str)
 
@@ -1366,7 +1321,6 @@ class ControlWidget(QWidget):
         self.model.changed.connect(self._status_timer.start)
         self._refresh_data_status()
 
-    # ---- UI ---------------------------------------------------------------
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(4, 4, 4, 4)
@@ -1531,8 +1485,7 @@ class ControlWidget(QWidget):
         scroll.setWidget(bottom)
         split.addWidget(scroll)
         split.setSizes([430, 420])
-
-    # ---- roles / fill -----------------------------------------------------
+        
     def _set_default_roles(self, with_dx: bool):
         vals = {'x': 0, 'y': 1, 'dx': 2 if with_dx else None, 'dy': 3 if with_dx else 2}
         for k, cmb in self.cmb_role.items():
@@ -1584,7 +1537,6 @@ class ControlWidget(QWidget):
         except CellError as exc:
             show_warn(f'Could not fill column: {exc}')
 
-    # ---- data status ------------------------------------------------------
     def _refresh_data_status(self):
         try:
             ex = self.model.extract()
@@ -1598,8 +1550,7 @@ class ControlWidget(QWidget):
             parts.append('no ΔY values - fitting needs them (or tick "infer ΔY if missing")')
         self.lbl_data.setText(msg + ('  ' + ' • '.join(parts) if parts else ''))
         self.lbl_data.setStyleSheet('color: #b00020;' if ex.issues else 'color: #444;')
-
-    # ---- model / params ---------------------------------------------------
+        
     def _on_model_changed(self):
         if self._threads:
             self.cancel_fit()
@@ -1652,8 +1603,7 @@ class ControlWidget(QWidget):
         except Exception:
             guess = np.ones(len(vals))
         return np.array([g if v is None else v for v, g in zip(vals, guess)], float)
-
-    # ---- data collection --------------------------------------------------
+        
     def _collect(self):
         self._commit_editor()
         ex = self.model.extract()
@@ -1689,8 +1639,7 @@ class ControlWidget(QWidget):
         if sigma is None and need_dy and not self.cb_infer.isChecked():
             raise FitError('no ΔY values. Provide a ΔY column (or tick "infer ΔY if missing").')
         return sigma, xsigma, notes
-
-    # ---- plotting ---------------------------------------------------------
+        
     def _build_plot(self, ex, func=None, popt=None, fit: Optional[FitResult] = None, sigma=None, xsigma=None) -> PlotData:
         d = PlotData(data=ex.data, title=self.ed_title.text(), xlabel=self.ed_xlabel.text() or 'X',
                      ylabel=self.ed_ylabel.text() or 'Y', signature=self.ed_name.text(),
@@ -1779,7 +1728,6 @@ class ControlWidget(QWidget):
         except Exception as exc:
             show_warn(f'Could not plot model: {exc}')
 
-    # ---- fitting ----------------------------------------------------------
     def on_fit(self):
         if self._threads:
             return
@@ -1870,11 +1818,6 @@ class ControlWidget(QWidget):
         for t in list(self._threads):
             t.wait(ms)
 
-
-# =========================================================================== #
-#  Main window
-# =========================================================================== #
-
 class MyMainWindow(QMainWindow):
     def __init__(self, argv, x=None, y=None, xerr=None, yerr=None):
         super().__init__()
@@ -1907,8 +1850,7 @@ class MyMainWindow(QMainWindow):
         if x is not None or y is not None:
             self._load_arrays(x, y, xerr, yerr)
         self.control.undo_stack.setClean()
-
-    # ---- menus ------------------------------------------------------------
+        
     def _act(self, menu, text, shortcut, slot):
         a = QAction(text, self)
         if shortcut:
@@ -1951,8 +1893,7 @@ class MyMainWindow(QMainWindow):
         self._act(r, '&Cancel fit', 'Ctrl+.', c.cancel_fit)
         h = m.addMenu('&Help')
         self._act(h, '&Formulas && shortcuts', None, self.handle_help)
-
-    # ---- data in / out ----------------------------------------------------
+        
     def _load_arrays(self, x, y, xerr, yerr):
         try:
             cols = []
@@ -2107,8 +2048,7 @@ class MyMainWindow(QMainWindow):
             '"Fill column": write a formula for the first row, e.g. =1/sqrt(A2), and fill the column.\n'
             'ΔY / ΔX values left blank are copied from the row above.\n'
             'A ΔX column switches the fit to orthogonal distance regression.')
-
-    # ---- closing ----------------------------------------------------------
+        
     def _confirm_discard(self) -> bool:
         c = self.control
         if c.undo_stack.isClean() or c.model.last_row() == 0:
@@ -2132,11 +2072,6 @@ class MyMainWindow(QMainWindow):
         self.control.cancel_fit()
         self.control.wait_for_threads(5000)
         event.accept()
-
-
-# =========================================================================== #
-#  Entry point
-# =========================================================================== #
 
 _WINDOWS = []
 
