@@ -20,10 +20,12 @@ jobs:
         python-version: '3.10'
         
     - name: Install dependencies
+      shell: bash
       run: |
         python -m pip install --upgrade pip
         # Pin SciPy < 1.15 to avoid the __thread_bss crash on M1 Macs
         pip install numpy "scipy<1.15" matplotlib PyQt5 pyinstaller
+        
         # Mac needs pyobjc for the AppKit dock icon fix
         if [ "${{ matrix.os }}" = "macos-latest" ]; then
           pip install pyobjc-framework-Cocoa
@@ -31,7 +33,6 @@ jobs:
         
     - name: Build with PyInstaller (OneDir)
       run: |
-        # Build as a folder instead of a single .exe for instant load times
         pyinstaller --onedir --windowed --icon="app.ico" --name "LabFit" labfit.py
         # Copy the icon into the folder so the app can find it at runtime
         cp app.ico dist/LabFit/ 
