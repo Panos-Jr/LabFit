@@ -44,7 +44,7 @@ from functools import lru_cache
 from typing import Callable, Optional
 
 import numpy as np
-from scipy import stats as _stats
+import scipy.special
 from scipy.optimize import curve_fit
 from scipy.odr import ODR, Model, RealData
 
@@ -1136,7 +1136,7 @@ class FitEngine:
         if sig is not None and s is not None:
             res.chi2 = float(np.sum((resid / s) ** 2))
             res.chi2_red = res.chi2 / dof
-            res.pvalue = float(_stats.chi2.sf(res.chi2, dof))
+            res.pvalue = float(scipy.special.gammaincc(dof / 2.0, res.chi2 / 2.0))
             if res.chi2_red > 3:
                 notes.append(f'χ²/ν = {res.chi2_red:.2f} ≫ 1: the model may not describe the data, or the uncertainties are underestimated')
             elif res.chi2_red < 0.3:
