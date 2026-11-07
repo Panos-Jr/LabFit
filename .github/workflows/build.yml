@@ -1,24 +1,33 @@
 name: Build LabFit
 
-on: 
+on:
   push:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the older, now-pointless build.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false          # one OS failing must not cancel the other two
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        
+
     - name: Install dependencies
       shell: bash
       run: |
@@ -29,18 +38,30 @@ jobs:
         if [ "${{ matrix.os }}" = "macos-latest" ]; then
           pip install pyobjc-framework-Cocoa
         fi
-        
-    - name: Build with PyInstaller (Hybrid)
+        pip freeze   # shows exactly which versions this build used
+
+    - name: Build with PyInstaller
       shell: bash
       run: |
+        # --icon only sets the .exe/.app icon. labfit.py also loads app.ico at runtime
+        # for the window icon, so it has to be bundled as data (PyInstaller 6 keeps data
+        # in _internal/, so copying app.ico next to the exe does NOT work).
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then SEP=";"; else SEP=":"; fi
+
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          # Windows: OneFile (Instant load, bypasses Defender folder-scanning)
-          pyinstaller --onefile --windowed --icon="app.ico" --name "LabFit" labfit.py
-          cp app.ico dist/
+          # Windows A: single .exe
+          pyinstaller --noconfirm --onefile --windowed --icon="app.ico" \
+            --add-data "app.ico${SEP}." --name "LabFit" labfit.py
+          # Windows B: folder build, zipped. Published as a second artifact so the two can be
+          # timed side by side on a real lab PC (onefile unpacks ~120 MB to %TEMP% on every launch).
+          pyinstaller --noconfirm --onedir --windowed --icon="app.ico" \
+            --add-data "app.ico${SEP}." --name "LabFit" \
+            --distpath dist_folder --workpath build_folder labfit.py
+          python -c "import shutil; shutil.make_archive('dist/LabFit-Windows-folder', 'zip', 'dist_folder')"
         else
-          # Mac/Linux: OneDir (Instant load, no temp-file extraction)
-          pyinstaller --onedir --windowed --icon="app.ico" --name "LabFit" labfit.py
-          cp app.ico dist/LabFit/
+          # Mac/Linux: folder build (no temp-file extraction at launch)
+          pyinstaller --noconfirm --onedir --windowed --icon="app.ico" \
+            --add-data "app.ico${SEP}." --name "LabFit" labfit.py
         fi
 
     - name: Make Mac binary executable
@@ -59,12 +80,21 @@ jobs:
           zip -r LabFit-Linux.zip LabFit
         fi
 
-    - name: Upload Windows Artifact
+    - name: Upload Windows Artifact (single exe)
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
         name: LabFit-Windows
         path: dist/LabFit.exe
+        if-no-files-found: error
+
+    - name: Upload Windows Artifact (folder zip)
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: LabFit-Windows-folder
+        path: dist/LabFit-Windows-folder.zip
+        if-no-files-found: error
 
     - name: Upload Mac Artifact
       if: matrix.os == 'macos-latest'
@@ -72,6 +102,7 @@ jobs:
       with:
         name: LabFit-Mac-M1
         path: dist/LabFit-Mac-M1.zip
+        if-no-files-found: error
 
     - name: Upload Linux Artifact
       if: matrix.os == 'ubuntu-latest'
@@ -79,3 +110,4 @@ jobs:
       with:
         name: LabFit-Linux
         path: dist/LabFit-Linux.zip
+        if-no-files-found: error
