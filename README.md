@@ -15,7 +15,7 @@ You do **not** need Python. Download the build for your system from the [**Relea
 | **macOS** (Apple Silicon: M1 or later) | `LabFit-Mac-M1.zip` | Extract, open the `LabFit` folder, run `LabFit`. See [macOS notes](#macos). |
 | **Linux** | `LabFit-Linux.zip` | Extract, open the `LabFit` folder, you may have to mark `LabFit` as executable ("Allow executing file as program", or `chmod +x LabFit/LabFit`), run it. |
 
-**Which Windows version?** The single `.exe` unpacks itself to a temporary folder every time it starts, so it takes about 5 s to open in our tests. The folder version opens in under 2 s (the very first launch can be slower while Windows scans the files). If start-up speed matters to you, use the folder version.
+**Which Windows version?** The single `.exe` unpacks itself to a temporary folder every time it starts, so it takes about 5s to open in our tests. The folder version opens in under 2s (the very first launch can be slower while Windows scans the files). If start-up speed matters to you, use the folder version.
 
 Intel Macs are not yet supported by the current macOS build.
 
