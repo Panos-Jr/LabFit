@@ -268,6 +268,9 @@ def shift_formula(text: str, drow: int) -> str:
         return f'{m.group(1)}{m.group(2).upper()}{m.group(3)}{row}'
     return _REF_RE.sub(rep, text)
 
+
+
+
 _EMPTY = ('empty', None)
 
 
@@ -317,6 +320,7 @@ class DataTableModel(QAbstractTableModel):
         self._formulas: set = set()
         self.undo_stack = undo_stack
         self.roles: dict = {'x': 0, 'y': 1, 'dx': None, 'dy': 2}
+
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._raw)
@@ -468,7 +472,7 @@ class DataTableModel(QAbstractTableModel):
             evaluate_expression(s, lambda rr, cc: self._ref(rr, cc, set()))
             return '=' + s
         except CellError:
-            return s
+            return s          # keep the text; it will show #ERR with an explanation
 
     def push_changes(self, changes: dict, text: str):
         old, new = {}, {}
@@ -566,7 +570,7 @@ class DataTableModel(QAbstractTableModel):
         changes = {(r - 1, col): shift_formula(t, r - base) for r in range(base, last + 1)}
         self.push_changes(changes, f'fill column {LETTERS[col]}')
         return len(changes)
-
+        
     def extract(self) -> Extracted:
         self._ensure_cache()
         n = len(self._raw)
@@ -758,6 +762,7 @@ class SpreadsheetView(QTableView):
                          ('Clear', self.clear_selection), ('Fill down', self.fill_down_selection)):
             menu.addAction(text, fn)
         menu.exec_(self.viewport().mapToGlobal(pos))
+
 
 class FitFunction(ABC):
     name: str = 'abstract'
@@ -1320,7 +1325,7 @@ class ControlWidget(QWidget):
         self._status_timer.timeout.connect(self._refresh_data_status)
         self.model.changed.connect(self._status_timer.start)
         self._refresh_data_status()
-
+        
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(4, 4, 4, 4)
@@ -1485,7 +1490,7 @@ class ControlWidget(QWidget):
         scroll.setWidget(bottom)
         split.addWidget(scroll)
         split.setSizes([430, 420])
-        
+
     def _set_default_roles(self, with_dx: bool):
         vals = {'x': 0, 'y': 1, 'dx': 2 if with_dx else None, 'dy': 3 if with_dx else 2}
         for k, cmb in self.cmb_role.items():
@@ -1550,7 +1555,7 @@ class ControlWidget(QWidget):
             parts.append('no ΔY values - fitting needs them (or tick "infer ΔY if missing")')
         self.lbl_data.setText(msg + ('  ' + ' • '.join(parts) if parts else ''))
         self.lbl_data.setStyleSheet('color: #b00020;' if ex.issues else 'color: #444;')
-        
+
     def _on_model_changed(self):
         if self._threads:
             self.cancel_fit()
@@ -1603,7 +1608,7 @@ class ControlWidget(QWidget):
         except Exception:
             guess = np.ones(len(vals))
         return np.array([g if v is None else v for v, g in zip(vals, guess)], float)
-        
+
     def _collect(self):
         self._commit_editor()
         ex = self.model.extract()
@@ -1639,7 +1644,7 @@ class ControlWidget(QWidget):
         if sigma is None and need_dy and not self.cb_infer.isChecked():
             raise FitError('no ΔY values. Provide a ΔY column (or tick "infer ΔY if missing").')
         return sigma, xsigma, notes
-        
+
     def _build_plot(self, ex, func=None, popt=None, fit: Optional[FitResult] = None, sigma=None, xsigma=None) -> PlotData:
         d = PlotData(data=ex.data, title=self.ed_title.text(), xlabel=self.ed_xlabel.text() or 'X',
                      ylabel=self.ed_ylabel.text() or 'Y', signature=self.ed_name.text(),
@@ -2048,7 +2053,7 @@ class MyMainWindow(QMainWindow):
             '"Fill column": write a formula for the first row, e.g. =1/sqrt(A2), and fill the column.\n'
             'ΔY / ΔX values left blank are copied from the row above.\n'
             'A ΔX column switches the fit to orthogonal distance regression.')
-        
+
     def _confirm_discard(self) -> bool:
         c = self.control
         if c.undo_stack.isClean() or c.model.last_row() == 0:
@@ -2078,17 +2083,40 @@ _WINDOWS = []
 
 def main(x=None, y=None, xerr=None, yerr=None):
     app = QApplication.instance() or QApplication(sys.argv)
+    
+    if sys.platform == 'win32':
+        import ctypes
+        myappid = 'uob.labfit.plotfit.1.0'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    elif sys.platform == 'darwin':
+        try:
+            from AppKit import NSApplication, NSApplicationActivationPolicyRegular
+            NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyRegular)
+        except ImportError:
+            pass
+
     try:
         app.setStyle('Fusion')
     except Exception:
         pass
+    
     w = MyMainWindow(sys.argv, x=x, y=y, xerr=xerr, yerr=yerr)
     _WINDOWS.append(w)
+    
     from PyQt5.QtGui import QIcon
-    w.setWindowIcon(QIcon(resource_path('app.ico')))
+    icon = QIcon(resource_path('app.ico'))
+    w.setWindowIcon(icon)
+    
     w.show()
-    return app.exec_()
+    
+    if sys.platform == 'win32':
+        w.setWindowIcon(icon)
+        try:
+            ctypes.windll.user32.SetWindowPos(int(w.winId()), -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+        except Exception:
+            pass
 
+    return app.exec_()
 
 if __name__ == '__main__':
     sys.exit(main())
