@@ -1,0 +1,50 @@
+name: Build LabFit
+
+on: 
+  push:
+  workflow_dispatch: # Allows you to click a "Run" button manually
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install numpy scipy matplotlib PyQt5 pyinstaller
+        
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller LabFit.spec
+
+    - name: Upload Windows App
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: LabFit-Windows
+        path: dist/LabFit.exe
+
+    - name: Upload Mac App
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: LabFit-Mac
+        path: dist/LabFit.app
+
+    - name: Upload Linux App
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: LabFit-Linux
+        path: dist/LabFit
