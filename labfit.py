@@ -11,7 +11,7 @@ Run:
     -i   Infer uncertainties from the scatter of the data if no dY is given.
 
 From a script / console:
-    import numpy as np, y1labfit
+    import numpy as np, labfit
     x = np.linspace(-10, 10, 30)
     y = 0.1 * x + 0.5 * np.random.rand(30)
     labfit.main(x=x, y=y, xerr=None, yerr=np.ones(30) * 0.05)
