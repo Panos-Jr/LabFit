@@ -2,7 +2,9 @@ name: Build LabFit
 
 on: 
   push:
-  workflow_dispatch:
+    tags:
+      - 'v*' # Triggers ONLY when you push a tag like v1.0 or v2.1.3
+  workflow_dispatch: # Keeps the manual "Run workflow" button
 
 jobs:
   build:
@@ -28,28 +30,54 @@ jobs:
       run: |
         pyinstaller LabFit.spec
 
-    - name: Upload Windows App
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: LabFit-Windows
-        path: dist/LabFit.exe
-
-    - name: Upload Linux App
-      if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: LabFit-Linux
-        path: dist/LabFit
-
     - name: Fix Mac Binary (Make executable)
       if: matrix.os == 'macos-latest'
       run: |
         chmod +x dist/LabFit
 
-    - name: Upload Mac App
-      if: matrix.os == 'macos-latest'
+    # 1. RENAME the files so they have extensions (.exe, .app, linux)
+    - name: Rename artifacts
+      shell: bash
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          mv dist/LabFit.exe dist/LabFit-Windows.exe
+        elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+          mv dist/LabFit dist/LabFit-Mac
+        else
+          mv dist/LabFit dist/LabFit-Linux
+        fi
+
+    # 2. UPLOAD them as temporary workflow artifacts
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: LabFit-Mac
-        path: dist/LabFit
+        name: LabFit-${{ matrix.os }}
+        path: |
+          dist/LabFit-Windows.exe
+          dist/LabFit-Mac
+          dist/LabFit-Linux
+        if-no-files-found: ignore
+
+  # 3. AUTOMATIC RELEASE JOB
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') # Only run if a tag was pushed
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/LabFit-Windows.exe
+            artifacts/LabFit-Mac
+            artifacts/LabFit-Linux
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
