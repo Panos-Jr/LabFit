@@ -25,41 +25,57 @@ jobs:
         python -m pip install --upgrade pip
         # Pin SciPy < 1.15 to avoid the __thread_bss crash on M1 Macs
         pip install numpy "scipy<1.15" matplotlib PyQt5 pyinstaller
-        
         # Mac needs pyobjc for the AppKit dock icon fix
         if [ "${{ matrix.os }}" = "macos-latest" ]; then
           pip install pyobjc-framework-Cocoa
         fi
         
-    - name: Build with PyInstaller (OneDir)
+    - name: Build with PyInstaller (Hybrid)
+      shell: bash
       run: |
-        pyinstaller --onedir --windowed --icon="app.ico" --name "LabFit" labfit.py
-        # Copy the icon into the folder so the app can find it at runtime
-        cp app.ico dist/LabFit/ 
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          # Windows: OneFile (Instant load, bypasses Defender folder-scanning)
+          pyinstaller --onefile --windowed --icon="app.ico" --name "LabFit" labfit.py
+          cp app.ico dist/
+        else
+          # Mac/Linux: OneDir (Instant load, no temp-file extraction)
+          pyinstaller --onedir --windowed --icon="app.ico" --name "LabFit" labfit.py
+          cp app.ico dist/LabFit/
+        fi
 
     - name: Make Mac binary executable
       if: matrix.os == 'macos-latest'
       run: |
         chmod +x dist/LabFit/LabFit
 
-    - name: Zip the output folder
+    - name: Zip Mac and Linux folders
+      if: matrix.os != 'windows-latest'
       shell: bash
       run: |
         cd dist
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          7z a -tzip LabFit-Windows.zip LabFit
-        elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+        if [ "${{ matrix.os }}" = "macos-latest" ]; then
           zip -r LabFit-Mac-M1.zip LabFit
         else
           zip -r LabFit-Linux.zip LabFit
         fi
 
-    - name: Upload Artifacts
+    - name: Upload Windows Artifact
+      if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: LabFit-${{ matrix.os }}
-        path: |
-          dist/LabFit-Windows.zip
-          dist/LabFit-Mac-M1.zip
-          dist/LabFit-Linux.zip
-        if-no-files-found: ignore
+        name: LabFit-Windows
+        path: dist/LabFit.exe
+
+    - name: Upload Mac Artifact
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: LabFit-Mac-M1
+        path: dist/LabFit-Mac-M1.zip
+
+    - name: Upload Linux Artifact
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: LabFit-Linux
+        path: dist/LabFit-Linux.zip
