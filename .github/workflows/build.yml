@@ -9,7 +9,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13] # macos-13 is Intel-based
+        os: [ubuntu-latest, windows-latest, macos-latest] # Standard M1/M2 Mac runner
 
     steps:
     - uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # Pin SciPy < 1.15 to fix the __thread_bss crash on modern macOS
+        # We MUST pin scipy < 1.15 to avoid the __thread_bss crash on M1 Macs
         pip install numpy "scipy<1.15" matplotlib PyQt5 pyinstaller
         
     - name: Build with PyInstaller
@@ -30,7 +30,7 @@ jobs:
         pyinstaller LabFit.spec
 
     - name: Fix Mac Binary (Make executable)
-      if: matrix.os == 'macos-13'
+      if: matrix.os == 'macos-latest'
       run: |
         chmod +x dist/LabFit
 
@@ -39,8 +39,8 @@ jobs:
       run: |
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           mv dist/LabFit.exe dist/LabFit-Windows.exe
-        elif [ "${{ matrix.os }}" = "macos-13" ]; then
-          mv dist/LabFit dist/LabFit-Mac
+        elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+          mv dist/LabFit dist/LabFit-Mac-M1
         else
           mv dist/LabFit dist/LabFit-Linux
         fi
@@ -51,6 +51,6 @@ jobs:
         name: LabFit-${{ matrix.os }}
         path: |
           dist/LabFit-Windows.exe
-          dist/LabFit-Mac
+          dist/LabFit-Mac-M1
           dist/LabFit-Linux
         if-no-files-found: ignore
