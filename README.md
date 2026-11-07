@@ -17,7 +17,7 @@ You do **not** need Python. Download the build for your system from the [**Relea
 
 **Which Windows version?** The single `.exe` unpacks itself to a temporary folder every time it starts, so it takes about 5 s to open in our tests. The folder version opens in under 2 s (the very first launch can be slower while Windows scans the files). If start-up speed matters to you, use the folder version.
 
-Intel Macs are not supported by the current macOS build.
+Intel Macs are not yet supported by the current macOS build.
 
 ## Quick start
 
