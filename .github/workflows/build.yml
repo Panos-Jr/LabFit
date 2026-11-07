@@ -9,7 +9,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest] # Standard M1/M2 Mac runner
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
     - uses: actions/checkout@v4
@@ -22,35 +22,43 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # We MUST pin scipy < 1.15 to avoid the __thread_bss crash on M1 Macs
+        # Pin SciPy < 1.15 to avoid the __thread_bss crash on M1 Macs
         pip install numpy "scipy<1.15" matplotlib PyQt5 pyinstaller
+        # Mac needs pyobjc for the AppKit dock icon fix
+        if [ "${{ matrix.os }}" = "macos-latest" ]; then
+          pip install pyobjc-framework-Cocoa
+        fi
         
-    - name: Build with PyInstaller
+    - name: Build with PyInstaller (OneDir)
       run: |
-        pyinstaller LabFit.spec
+        # Build as a folder instead of a single .exe for instant load times
+        pyinstaller --onedir --windowed --icon="app.ico" --name "LabFit" labfit.py
+        # Copy the icon into the folder so the app can find it at runtime
+        cp app.ico dist/LabFit/ 
 
-    - name: Fix Mac Binary (Make executable)
+    - name: Make Mac binary executable
       if: matrix.os == 'macos-latest'
       run: |
-        chmod +x dist/LabFit
+        chmod +x dist/LabFit/LabFit
 
-    - name: Rename artifacts
+    - name: Zip the output folder
       shell: bash
       run: |
+        cd dist
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          mv dist/LabFit.exe dist/LabFit-Windows.exe
+          7z a -tzip LabFit-Windows.zip LabFit
         elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-          mv dist/LabFit dist/LabFit-Mac-M1
+          zip -r LabFit-Mac-M1.zip LabFit
         else
-          mv dist/LabFit dist/LabFit-Linux
+          zip -r LabFit-Linux.zip LabFit
         fi
 
-    - name: Upload Artifact
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: LabFit-${{ matrix.os }}
         path: |
-          dist/LabFit-Windows.exe
-          dist/LabFit-Mac-M1
-          dist/LabFit-Linux
+          dist/LabFit-Windows.zip
+          dist/LabFit-Mac-M1.zip
+          dist/LabFit-Linux.zip
         if-no-files-found: ignore
