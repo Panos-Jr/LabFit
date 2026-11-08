@@ -2,7 +2,7 @@
 
 A plot-and-fit tool for the Y1 Physics Lab: paste your data, get a fit with proper uncertainties, and export a lab-report-ready plot.
 
-Originally created by Wolfgang Theis (2019). This version is a complete rewrite with an Excel-style spreadsheet, formulas, a column calculator, richer fit diagnostics and cross-platform builds.
+Originally created by Wolfgang Theis (2019). This version is a revision with an Excel-style spreadsheet, formulas, a column calculator, richer fit diagnostics and cross-platform builds.
 
 ## Download and run
 
