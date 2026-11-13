@@ -2,7 +2,11 @@
 
 A plot-and-fit tool for the Y1 Physics Lab: paste your data, get a fit with proper uncertainties, and export a lab-report-ready plot.
 
-Originally created by Wolfgang Theis (2019). This version is a revision with an Excel-style spreadsheet, formulas, a column calculator, richer fit diagnostics and cross-platform builds.
+Originally created by Wolfgang Theis (2019). This version is a complete rewrite with an Excel-style spreadsheet, formulas, a column calculator, richer fit diagnostics and cross-platform builds.
+
+> 📱 **On an iPad, iPhone, or tablet?** 
+> Try the lightweight, no-install **Web Version**: **[labfit-web.netlify.app](https://labfit-web.netlify.app)**
+> *(Optimized for touch screens: just paste data, pick a model, and get instant results).*
 
 ## Download and run
 
@@ -10,15 +14,15 @@ You do **not** need Python. Download the build for your system from the [**Relea
 
 | System | File | How to run |
 | :--- | :--- | :--- |
+| **Web (Mobile / Tablet)** | *No download* | Go to **[labfit-web.netlify.app](https://labfit-web.netlify.app)** and add it to your home screen. |
 | **Windows** | `LabFit-Windows.zip` | Extract, double-click `LabFit.exe`. |
 | **Windows** (faster start) | `LabFit-Windows-folder.zip` | Extract the **whole folder** (don't run from inside the zip), double-click `LabFit.exe` inside it. |
 | **macOS** (Apple Silicon: M1 or later) | `LabFit-Mac-M1.zip` | Extract, open the `LabFit` folder, run `LabFit`. See [macOS notes](#macos). |
-| **Linux** | `LabFit-Linux.zip` | Extract, open the `LabFit` folder, you may have to mark `LabFit` as executable ("Allow executing file as program", or `chmod +x LabFit/LabFit`), run it. |
+| **Linux** | `LabFit-Linux.zip` | Extract, open the `LabFit` folder, mark `LabFit` as executable ("Allow executing file as program", or `chmod +x LabFit/LabFit`), run it. |
 
-**Which Windows version?** The single `.exe` unpacks itself to a temporary folder every time it starts, so it takes about 5s to open in our tests. The folder version opens in under 2s (the very first launch can be slower while Windows scans the files). If start-up speed matters to you, use the folder version.
+**Which Windows version?** The single `.exe` unpacks itself to a temporary folder every time it starts, so it takes about 5 s to open in our tests. The folder version opens in under 2 s (the very first launch can be slower while Windows scans the files). If start-up speed matters to you, use the folder version.
 
-Intel Macs are not yet supported by the current macOS build.
-
+Intel Macs are not supported by the current macOS build.
 ## Quick start
 
 1. **Enter data.** Paste from Excel/Sheets (`Ctrl+V`) or type into the table. A header row is skipped automatically.
